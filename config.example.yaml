@@ -1,0 +1,31 @@
+# File to store reading results
+file: messages.txt
+
+# Logger settings
+logLevel: info # debug, info, warning, error
+logPeriod: 10s
+
+# Kafka consumer group id
+groupID: group-id
+
+# List kafka brokers
+brokers:
+  - kafka1.example.com:9092
+  - kafka2.example.com:9092
+  - kafka3.example.com:9092
+
+# Kafka topic to read from
+topic: topic
+
+# Initial offset:
+# -2 for oldest
+# -1 for newest
+# otherwise - timestamp in seconds (integer)
+offset: -1
+
+# Payload fields for filtering messages from kafka
+filter:
+  field1: value
+  field2: 10
+  field3: 20.2
+  field4: true
