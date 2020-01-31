@@ -7,6 +7,7 @@ import (
 	"time"
 
 	kafka "github.com/segmentio/kafka-go"
+	_ "github.com/segmentio/kafka-go/gzip"
 	_ "github.com/segmentio/kafka-go/snappy"
 	log "github.com/sirupsen/logrus"
 )
