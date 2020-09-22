@@ -29,3 +29,4 @@ filter:
   field2: 10
   field3: 20.2
   field4: true
+  field5: [1, 2, 3]

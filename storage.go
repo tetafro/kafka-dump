@@ -29,7 +29,7 @@ func newStorage(
 	filter map[string]interface{},
 	in chan message,
 ) (*storage, error) {
-	f, err := os.OpenFile(file, os.O_RDWR|os.O_TRUNC|os.O_CREATE, 0600)
+	f, err := os.OpenFile(file, os.O_RDWR|os.O_TRUNC|os.O_CREATE, 0o600)
 	if err != nil {
 		return nil, fmt.Errorf("open file %s: %v", file, err)
 	}
@@ -78,7 +78,10 @@ func (s *storage) run() error {
 func (s *storage) check(m map[string]interface{}) bool {
 	for k, v := range s.filter {
 		data, ok := m[k]
-		if !ok || !equal(v, data) {
+		if !ok {
+			return false
+		}
+		if !equal(v, data) && !contain(v, data) {
 			return false
 		}
 	}

@@ -24,6 +24,19 @@ func equal(a, b interface{}) bool {
 	return false
 }
 
+func contain(a, b interface{}) bool {
+	slice, ok := a.([]interface{})
+	if !ok {
+		return false
+	}
+	for i := range slice {
+		if equal(slice[i], b) {
+			return true
+		}
+	}
+	return false
+}
+
 func toFloat(val interface{}) (float64, bool) {
 	switch v := val.(type) {
 	case int:
