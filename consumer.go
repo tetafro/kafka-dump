@@ -96,7 +96,7 @@ func setOffset(ctx context.Context, brokers []string, topic, gid string, ts int6
 		return fmt.Errorf("get partitions: %v", err)
 	}
 
-	log.Debug("Get offsets by timestamp", time.Unix(ts, 0))
+	log.Debugf("Get offsets by timestamp %s", time.Unix(ts, 0))
 	offsets := make(map[int]int64, len(parts))
 	for _, p := range parts {
 		addr := fmt.Sprintf("%s:%d", p.Leader.Host, p.Leader.Port)
@@ -112,7 +112,7 @@ func setOffset(ctx context.Context, brokers []string, topic, gid string, ts int6
 		offsets[p.ID] = offset
 	}
 
-	log.Debugf("Set offsets (%d partitions)", len(parts))
+	log.Debugf("Set offsets (%d partitions) for %s/%s", len(parts), topic, gid)
 	group, err := kafka.NewConsumerGroup(kafka.ConsumerGroupConfig{
 		Brokers: brokers,
 		Topics:  []string{topic},
