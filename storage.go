@@ -43,8 +43,7 @@ func newStorage(
 }
 
 func (s *storage) run() error {
-	var lastMsg time.Time
-	var lastLog time.Time
+	var lastMsg, lastLog time.Time
 	for msg := range s.input {
 		s.counter.total++
 
@@ -55,7 +54,7 @@ func (s *storage) run() error {
 			if !lastLog.IsZero() { // skip first time
 				log.Infof(
 					"Read all messages until %s (total %d, saved %d)",
-					lastMsg.Format("2006-01-02 15:04:05"),
+					lastMsg.Local().Format("2006-01-02 15:04:05"),
 					s.counter.total,
 					s.counter.saved,
 				)
@@ -67,7 +66,7 @@ func (s *storage) run() error {
 			continue
 		}
 
-		if err := s.save(msg.data); err != nil {
+		if err := s.save(msg); err != nil {
 			return fmt.Errorf("save message: %v", err)
 		}
 		s.counter.saved++
@@ -88,8 +87,8 @@ func (s *storage) check(m map[string]interface{}) bool {
 	return true
 }
 
-func (s *storage) save(m map[string]interface{}) error {
-	data, err := json.MarshalIndent(m, "", "    ")
+func (s *storage) save(m message) error {
+	data, err := json.MarshalIndent(m.data, "", "    ")
 	if err != nil {
 		return err
 	}
