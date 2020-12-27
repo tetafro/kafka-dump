@@ -35,9 +35,9 @@ func newConsumer(brokers []string, topic, gid string, start int64) (*consumer, e
 	}
 
 	switch start {
-	case -2:
-		c.conf.StartOffset = kafka.LastOffset
 	case -1:
+		c.conf.StartOffset = kafka.LastOffset
+	case -2:
 		c.conf.StartOffset = kafka.FirstOffset
 	case 0:
 		c.conf.StartOffset = kafka.FirstOffset
