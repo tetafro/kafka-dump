@@ -4,13 +4,10 @@ import (
 	"context"
 	"os"
 	"os/signal"
-	"sync"
 	"syscall"
 
 	log "github.com/sirupsen/logrus"
 )
-
-const configFile = "./config.yaml"
 
 func main() {
 	log.SetFormatter(&log.TextFormatter{
@@ -20,45 +17,53 @@ func main() {
 	log.SetLevel(log.InfoLevel)
 	log.Info("Starting...")
 
-	conf, err := readConfig(configFile)
+	conf, err := ReadConfig()
 	if err != nil {
 		log.Fatalf("Failed to read config: %v", err)
 	}
-	level, err := log.ParseLevel(conf.LogLevel)
+
+	level, err := log.ParseLevel(conf.Logs.Level)
 	if err != nil {
-		log.Errorf("Invalid log level '%s', using default: info", conf.LogLevel)
+		log.Errorf("Invalid log level '%s', using default: info", conf.Logs.Level)
 	}
 	log.SetLevel(level)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	go waitForStop(cancel)
-
-	c, err := newConsumer(conf.Brokers, conf.Topic, conf.GroupID, conf.Offset)
+	// Init kafka consumer
+	c, err := NewKafkaConsumer(conf.Kafka)
 	if err != nil {
 		log.Fatalf("Failed to init consumer: %v", err)
 	}
-	st, err := newStorage(conf.File, conf.LogPeriod, conf.Filter, c.messages)
-	if err != nil {
-		log.Fatalf("Failed to init storage: %v", err)
-	}
 
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		log.Debug("Start storage")
-		if err := st.run(); err != nil {
-			log.Fatalf("Storage failure: %v", err)
+	// Init messages filter
+	f := NewFieldFilter(conf.Filter)
+
+	// Init storage
+	var s Storage
+	if conf.File != "" {
+		log.Infof("Saving messages to %s", conf.File)
+		s, err = NewFileSystemStorage(conf.File)
+		if err != nil {
+			log.Fatalf("Failed to init file storage: %v", err)
 		}
-		wg.Done()
-	}()
-
-	log.Debug("Start consumer")
-	if err := c.run(ctx); err != nil {
-		log.Fatalf("Consumer failed: %v", err)
+	} else {
+		log.Infof("Saving messages to %s", conf.Mongo.Addr)
+		s, err = NewMongoStorage(conf.Mongo)
+		if err != nil {
+			log.Fatalf("Failed to init mongodb storage: %v", err)
+		}
 	}
-	log.Debug("Consumer is done")
 
-	wg.Wait()
+	// Init pipeline
+	dmp := NewDumper(c, f, s, conf.Logs.Period)
+
+	// Listen for SIGTERM
+	ctx, cancel := context.WithCancel(context.Background())
+	go waitForStop(cancel)
+
+	// Run pipeline
+	if err := dmp.Run(ctx); err != nil {
+		log.Fatalf("Dump process failed: %v", err)
+	}
 	log.Info("Shutdown")
 }
 

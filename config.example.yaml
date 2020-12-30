@@ -1,27 +1,33 @@
-# File to store reading results
+# Storage for messages - choose a file or mongodb
 file: messages.txt
+# mongo:
+#   addr: mongodb://localhost:27017
+#   database: kafka
+#   collection: events
 
 # Logger settings
-logLevel: info # debug, info, warning, error
-logPeriod: 10s
+logs:
+  level: info
+  period: 10s
 
-# Kafka consumer group id
-groupID: group-id
+kafka:
+  # Kafka consumer group id
+  groupID: group-id
 
-# List kafka brokers
-brokers:
-  - kafka1.example.com:9092
-  - kafka2.example.com:9092
-  - kafka3.example.com:9092
+  # List of kafka brokers
+  brokers:
+    - kafka1.example.com:9092
+    - kafka2.example.com:9092
+    - kafka3.example.com:9092
 
-# Kafka topic to read from
-topic: topic
+  # Kafka topic to read from
+  topic: topic
 
-# Initial offset:
-# -2 for oldest
-# -1 for newest
-# otherwise - timestamp in seconds (integer)
-offset: -1
+  # Initial offset:
+  # -2 for oldest
+  # -1 for newest (default)
+  # otherwise - timestamp in seconds (integer)
+  offset: -1
 
 # Payload fields for filtering messages from kafka
 filter:

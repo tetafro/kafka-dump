@@ -1,6 +1,37 @@
 package main
 
-import "strconv"
+import (
+	"strconv"
+)
+
+// Filter describes a way to decide whether a message should be saved or not.
+type Filter interface {
+	Check(Message) bool
+}
+
+// FieldFilter is a filter that makes a decision based on message's fields.
+type FieldFilter struct {
+	fields map[string]interface{}
+}
+
+// NewFieldFilter creates new field filter.
+func NewFieldFilter(fields map[string]interface{}) *FieldFilter {
+	return &FieldFilter{fields: fields}
+}
+
+// Check decides whether a message should be saved or not.
+func (f *FieldFilter) Check(msg Message) bool {
+	for k, v := range f.fields {
+		data, ok := msg.data[k]
+		if !ok {
+			return false
+		}
+		if !equal(v, data) && !contain(v, data) {
+			return false
+		}
+	}
+	return true
+}
 
 func equal(a, b interface{}) bool {
 	f1, ok1 := toFloat(a)
@@ -30,7 +61,8 @@ func contain(a, b interface{}) bool {
 		return false
 	}
 	for i := range slice {
-		if equal(slice[i], b) {
+		res := equal(slice[i], b)
+		if res {
 			return true
 		}
 	}

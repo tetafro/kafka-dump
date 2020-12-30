@@ -12,37 +12,58 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-type message struct {
+// Message is a kafka message with timestamp.
+type Message struct {
 	time time.Time
 	data map[string]interface{}
 }
 
-type consumer struct {
-	conf     kafka.ReaderConfig
-	kafka    *kafka.Reader
-	messages chan message
+// Consumer describes source of messages.
+type Consumer interface {
+	Read(context.Context) (Message, error)
+	Close()
 }
 
-func newConsumer(brokers []string, topic, gid string, start int64) (*consumer, error) {
-	c := &consumer{
-		conf: kafka.ReaderConfig{
-			Brokers:        brokers,
-			Topic:          topic,
-			GroupID:        gid,
-			CommitInterval: time.Second,
-		},
-		messages: make(chan message),
+// KafkaConsumer is a consumer that reads messages from kafka.
+type KafkaConsumer struct {
+	conf     kafka.ReaderConfig
+	kafka    *kafka.Reader
+	messages chan Message
+}
+
+// NewKafkaConsumer creates new kafka consumer.
+func NewKafkaConsumer(conf KafkaConf) (*KafkaConsumer, error) {
+	if len(conf.Brokers) == 0 {
+		return nil, fmt.Errorf("brokers list is empty")
+	}
+	if conf.Topic == "" {
+		return nil, fmt.Errorf("topic is empty")
+	}
+	if conf.GroupID == "" {
+		return nil, fmt.Errorf("group id is empty")
+	}
+	if conf.Offset == 0 {
+		conf.Offset = -1
 	}
 
-	switch start {
+	c := &KafkaConsumer{
+		conf: kafka.ReaderConfig{
+			Brokers:        conf.Brokers,
+			Topic:          conf.Topic,
+			GroupID:        conf.GroupID,
+			CommitInterval: time.Second,
+		},
+		messages: make(chan Message),
+	}
+
+	switch conf.Offset {
 	case -1:
 		c.conf.StartOffset = kafka.LastOffset
 	case -2:
 		c.conf.StartOffset = kafka.FirstOffset
-	case 0:
-		c.conf.StartOffset = kafka.FirstOffset
 	default:
-		if err := setOffset(context.TODO(), brokers, topic, gid, start); err != nil {
+		err := setOffset(context.TODO(), conf.Brokers, conf.Topic, conf.GroupID, conf.Offset)
+		if err != nil {
 			return nil, fmt.Errorf("set offsets: %v", err)
 		}
 	}
@@ -52,35 +73,24 @@ func newConsumer(brokers []string, topic, gid string, start int64) (*consumer, e
 	return c, nil
 }
 
-func (c *consumer) run(ctx context.Context) error {
-	defer c.kafka.Close()
-	defer close(c.messages)
-	for {
-		select {
-		case <-ctx.Done():
-			return nil
-		default:
-		}
-
-		msg, err := c.kafka.ReadMessage(ctx)
-		if err == context.Canceled {
-			return nil
-		}
-		if err != nil {
-			return fmt.Errorf("read message: %v", err)
-		}
-
-		var data map[string]interface{}
-		if err := json.Unmarshal(msg.Value, &data); err != nil {
-			log.Errorf("Invalid json: %s", string(msg.Value))
-			continue
-		}
-
-		c.messages <- message{
-			time: msg.Time,
-			data: data,
-		}
+// Read reads next message from kafka.
+func (c *KafkaConsumer) Read(ctx context.Context) (Message, error) {
+	msg, err := c.kafka.ReadMessage(ctx)
+	if err != nil {
+		return Message{}, fmt.Errorf("read message: %v", err)
 	}
+
+	var data map[string]interface{}
+	if err := json.Unmarshal(msg.Value, &data); err != nil {
+		return Message{}, fmt.Errorf("invalid json: %s", msg.Value)
+	}
+
+	return Message{time: msg.Time, data: data}, nil
+}
+
+// Close properly closes kafka connection.
+func (c *KafkaConsumer) Close() {
+	c.kafka.Close() // nolint: errcheck,gosec
 }
 
 func setOffset(ctx context.Context, brokers []string, topic, gid string, ts int64) error {
@@ -88,7 +98,7 @@ func setOffset(ctx context.Context, brokers []string, topic, gid string, ts int6
 	if err != nil {
 		return fmt.Errorf("create connection: %v", err)
 	}
-	defer conn.Close()
+	defer conn.Close() // nolint: errcheck
 
 	log.Debug("Read partitions list")
 	parts, err := conn.ReadPartitions(topic)
@@ -104,7 +114,7 @@ func setOffset(ctx context.Context, brokers []string, topic, gid string, ts int6
 		if err != nil {
 			return fmt.Errorf("create connection to partition %d: %v", p.ID, err)
 		}
-		defer c.Close()
+		defer c.Close() // nolint: errcheck
 		offset, err := c.ReadOffset(time.Unix(ts, 0))
 		if err != nil {
 			return fmt.Errorf("read offset of partition %d: %v", p.ID, err)
@@ -121,7 +131,7 @@ func setOffset(ctx context.Context, brokers []string, topic, gid string, ts int6
 	if err != nil {
 		return fmt.Errorf("create consumer group: %v", err)
 	}
-	defer group.Close()
+	defer group.Close() // nolint: errcheck
 
 	gen, err := group.Next(ctx)
 	if err != nil {

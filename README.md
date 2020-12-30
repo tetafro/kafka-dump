@@ -5,8 +5,8 @@ Read kafka topic from timestamp, filter and save messages.
 - Uses [kafka-go](https://github.com/segmentio/kafka-go) package.
 - Only works with Kafka >= v0.10.0.
 - Only works with JSON-encoded payload.
-- May take some time on start, when consuming from timestamp (not just oldest
-  or newest), since it collects and resets offsets for all topic partitions.
+- May take some time on start, when consuming from the exact timestamp, because
+it collects and resets offsets for all topic partitions.
 
 Install
 ```sh
@@ -23,12 +23,11 @@ Run (no flags, only config values)
 kafka-dump
 ```
 
-Example output (shows statistics for total reads and number of saved messages)
-```sh
-INFO[21:23:11] Starting...
-INFO[21:23:11] Start consumer
-INFO[21:23:11] Start storage
-INFO[21:23:20] Read all messages until 2019-11-19 01:07:00 (total 104171, saved 0)
-INFO[21:23:30] Read all messages until 2019-11-19 01:08:00 (total 335857, saved 0)
-INFO[21:23:40] Read all messages until 2019-11-19 01:09:00 (total 561615, saved 0)
+Output
+```
+INFO[15:45:39] Starting...
+INFO[15:45:39] Saving messages to mongodb://localhost:27017
+INFO[15:45:49] Read messages from 2020-12-30 14:22:00 to 2020-12-30 14:53:01 (total 140346, saved 1428)
+INFO[15:45:59] Read messages from 2020-12-30 14:22:00 to 2020-12-30 14:54:00 (total 334520, saved 3425)
+INFO[15:46:09] Read messages from 2020-12-30 14:22:01 to 2020-12-30 14:54:01 (total 525725, saved 5463)
 ```

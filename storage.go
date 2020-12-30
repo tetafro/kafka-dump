@@ -1,97 +1,105 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 	"time"
 
-	log "github.com/sirupsen/logrus"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
+	"go.mongodb.org/mongo-driver/mongo/readpref"
 )
 
-type storage struct {
-	storage   io.WriteCloser
-	logPeriod time.Duration
-	filter    map[string]interface{}
-	input     chan message
-	counter   counter
+// Storage describes a storage for messages.
+type Storage interface {
+	Save(Message) error
+	Close()
 }
 
-type counter struct {
-	total int
-	saved int
+// FileSystemStorage is a storage that saves messages to a file.
+type FileSystemStorage struct {
+	file *os.File
 }
 
-func newStorage(
-	file string,
-	p time.Duration,
-	filter map[string]interface{},
-	in chan message,
-) (*storage, error) {
-	f, err := os.OpenFile(file, os.O_RDWR|os.O_TRUNC|os.O_CREATE, 0o600)
+// NewFileSystemStorage creates new filesystem storage.
+func NewFileSystemStorage(file string) (*FileSystemStorage, error) {
+	f, err := os.OpenFile(file, os.O_RDWR|os.O_TRUNC|os.O_CREATE, 0o600) // nolint: gosec
 	if err != nil {
 		return nil, fmt.Errorf("open file %s: %v", file, err)
 	}
-	st := &storage{
-		storage:   f,
-		logPeriod: p,
-		filter:    filter,
-		input:     in,
-	}
-	return st, nil
+	return &FileSystemStorage{file: f}, nil
 }
 
-func (s *storage) run() error {
-	var lastMsg, lastLog time.Time
-	for msg := range s.input {
-		s.counter.total++
-
-		if msg.time.After(lastMsg) {
-			lastMsg = msg.time
-		}
-		if time.Since(lastLog) > s.logPeriod {
-			if !lastLog.IsZero() { // skip first time
-				log.Infof(
-					"Read all messages until %s (total %d, saved %d)",
-					lastMsg.Local().Format("2006-01-02 15:04:05"),
-					s.counter.total,
-					s.counter.saved,
-				)
-			}
-			lastLog = time.Now()
-		}
-
-		if !s.check(msg.data) {
-			continue
-		}
-
-		if err := s.save(msg); err != nil {
-			return fmt.Errorf("save message: %v", err)
-		}
-		s.counter.saved++
+// Save formats a message as an indented json and saves it to the file.
+func (s *FileSystemStorage) Save(msg Message) error {
+	data, err := json.MarshalIndent(msg.data, "", "    ")
+	if err != nil {
+		return fmt.Errorf("marshall message: %v", err)
+	}
+	_, err = s.file.Write(append(data, []byte("\n")...))
+	if err != nil {
+		return fmt.Errorf("write data to file: %v", err)
 	}
 	return nil
 }
 
-func (s *storage) check(m map[string]interface{}) bool {
-	for k, v := range s.filter {
-		data, ok := m[k]
-		if !ok {
-			return false
-		}
-		if !equal(v, data) && !contain(v, data) {
-			return false
-		}
-	}
-	return true
+// Close properly closes the file.
+func (s *FileSystemStorage) Close() {
+	s.file.Close() // nolint: errcheck,gosec
 }
 
-func (s *storage) save(m message) error {
-	data, err := json.MarshalIndent(m.data, "", "    ")
-	if err != nil {
-		return err
+// MongoStorage is a storage that saves messages to mongodb.
+type MongoStorage struct {
+	client     *mongo.Client
+	database   string
+	collection string
+}
+
+// NewMongoStorage creates new mongodb storage.
+func NewMongoStorage(conf MongoConf) (*MongoStorage, error) {
+	if conf.Addr == "" {
+		return nil, fmt.Errorf("mongo address is empty")
 	}
-	_, err = s.storage.Write(append(data, []byte("\n")...))
-	return err
+	if conf.Database == "" {
+		return nil, fmt.Errorf("mongo database is empty")
+	}
+	if conf.Collection == "" {
+		return nil, fmt.Errorf("mongo collection is empty")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancel()
+
+	m, err := mongo.Connect(ctx, options.Client().ApplyURI(conf.Addr))
+	if err != nil {
+		return nil, fmt.Errorf("create connection: %v", err)
+	}
+
+	if err := m.Ping(ctx, readpref.Primary()); err != nil {
+		return nil, fmt.Errorf("ping primary node: %v", err)
+	}
+
+	s := &MongoStorage{
+		client:     m,
+		database:   conf.Database,
+		collection: conf.Collection,
+	}
+	return s, nil
+}
+
+// Save saves a message to mongodb.
+func (s *MongoStorage) Save(msg Message) error {
+	collection := s.client.Database(s.database).Collection(s.collection)
+	_, err := collection.InsertOne(context.Background(), msg.data)
+	if err != nil {
+		return fmt.Errorf("write data to file: %v", err)
+	}
+	return nil
+}
+
+// Close properly closes mongodb connection.
+func (s *MongoStorage) Close() {
+	s.client.Disconnect(context.Background()) // nolint: errcheck,gosec
 }
