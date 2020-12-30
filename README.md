@@ -8,10 +8,13 @@ Read kafka topic from timestamp, filter and save messages.
 - May take some time on start, when consuming from the exact timestamp, because
 it collects and resets offsets for all topic partitions.
 
-Install
+## Install
+
 ```sh
 go get github.com/tetafro/kafka-dump
 ```
+
+# Run
 
 Get sample config and set values
 ```sh
