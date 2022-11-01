@@ -1,8 +1,6 @@
 package main
 
-import (
-	"strconv"
-)
+import "strconv"
 
 // Filter describes a way to decide whether a message should be saved or not.
 type Filter interface {
