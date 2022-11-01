@@ -1,5 +1,5 @@
 dep:
-	go mod tidy && go mod vendor
+	go mod tidy && go mod verify
 
 test:
 	go test ./...
